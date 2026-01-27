@@ -1,4 +1,5 @@
 import User from "../models/User.model.js";
+import ApiError from "../utils/ApiError.js";
 import { createUserSchema } from "../validations/user.validation.js";
 
 // POST /users
@@ -7,19 +8,19 @@ export const createUser = async (req, res, next) => {
     const { error, value } = createUserSchema.validate(req.body, {
       abortEarly: false,
     });
+
     if (error) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: error.details.map((d) => d.message),
-      });
+      throw new ApiError(
+        400,
+        "Validation failed",
+        error.details.map((d) => d.message),
+      );
     }
 
     const existing = await User.findOne({ email: value.email });
-    if (existing)
-      return res
-        .status(409)
-        .json({ success: false, message: "Email already exists" });
+    if (existing) {
+      throw new ApiError(409, "Email already exists");
+    }
 
     const user = await User.create(value);
     res.status(201).json({ success: true, data: user });
@@ -28,26 +29,37 @@ export const createUser = async (req, res, next) => {
   }
 };
 
-
 // GET /users
 export const listUsers = async (req, res, next) => {
   try {
     const filter = {};
+    const { role, email } = req.query;
 
-    if (req.query.role) {
-      const allowedRoles = ["ADMIN", "CANDIDATE"];
-      if (!allowedRoles.includes(req.query.role)) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Invalid role filter" });
+    if (role) {
+      if (!["ADMIN", "CANDIDATE"].includes(role)) {
+        throw new ApiError(400, "Invalid role filter");
       }
-      filter.role = req.query.role;
+      filter.role = role;
     }
 
-    if (req.query.email) filter.email = new RegExp(req.query.email, "i");
+    if (email) {
+      filter.email = new RegExp(email, "i");
+    }
 
-    const users = await User.find(filter);
-    res.json({ success: true, data: users });
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+    const skip = (page - 1) * limit;
+
+    const [users, total] = await Promise.all([
+      User.find(filter).skip(skip).limit(limit),
+      User.countDocuments(filter),
+    ]);
+
+    res.json({
+      success: true,
+      data: users,
+      pagination: { page, limit, total },
+    });
   } catch (err) {
     next(err);
   }

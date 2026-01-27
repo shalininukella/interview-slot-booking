@@ -7,6 +7,7 @@ import userRoutes from "./routes/user.routes.js";
 import slotRoutes from "./routes/slot.routes.js";
 import bookingRoutes from "./routes/booking.routes.js";
 import errorHandler from "./middleware/error.middleware.js";
+import { setupSwagger } from "./config/swagger.js";
 
 const app = express();
 const swaggerDoc = YAML.load("./docs/swagger.yaml");
@@ -19,6 +20,9 @@ app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDoc));
 app.use("/users", userRoutes);
 app.use("/slots", slotRoutes);
 app.use("/bookings", bookingRoutes);
+
+// Swagger
+setupSwagger(app);
 
 app.use(errorHandler);
 

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Booking from "../models/Booking.model.js";
 import Slot from "../models/Slot.model.js";
+import ApiError from "../utils/ApiError.js";
 
 /**
  * Book a slot for a candidate
@@ -12,37 +13,34 @@ export const bookSlot = async (slotId, candidateId) => {
   session.startTransaction();
 
   try {
-    // 1. Check slot exists
+    // Check slot exists
     const slot = await Slot.findById(slotId).session(session);
     if (!slot) {
-      throw { status: 404, message: "Slot not found", errors: [] };
+      throw new ApiError(404, "Slot not found");
     }
 
-    // 2. Check duplicate booking
+    // Check duplicate booking (UX-level protection)
     const existingBooking = await Booking.findOne({
       slotId,
       candidateId,
     }).session(session);
+
     if (existingBooking) {
-      throw {
-        status: 409,
-        message: "You have already booked this slot",
-        errors: [],
-      };
+      throw new ApiError(409, "You have already booked this slot");
     }
 
-    // 3. Check capacity
+    // Check capacity
     const activeBookings = await Booking.countDocuments({
       slotId,
       status: "BOOKED",
     }).session(session);
 
     if (activeBookings >= slot.capacity) {
-      throw { status: 409, message: "Slot capacity exceeded", errors: [] };
+      throw new ApiError(409, "Slot capacity exceeded");
     }
 
-    // 4. Create booking
-    const booking = await Booking.create(
+    // Create booking
+    const [booking] = await Booking.create(
       [
         {
           slotId,
@@ -53,9 +51,15 @@ export const bookSlot = async (slotId, candidateId) => {
     );
 
     await session.commitTransaction();
-    return booking[0]; // return the created booking
+    return booking;
   } catch (err) {
     await session.abortTransaction();
+
+    // Handle duplicate booking race condition
+    if (err?.code === 11000) {
+      throw new ApiError(409, "You have already booked this slot");
+    }
+
     throw err;
   } finally {
     session.endSession();

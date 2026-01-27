@@ -21,4 +21,8 @@ export const checkOverlap = async (
   if (overlap) {
     throw new ApiError(409, "Slot overlaps with existing slot");
   }
+
+  if (new Date(startTime) >= new Date(endTime)) {
+    throw new ApiError(400, "startTime must be before endTime");
+  }
 };

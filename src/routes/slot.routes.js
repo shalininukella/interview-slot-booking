@@ -9,7 +9,6 @@ import {
   deleteSlot,
 } from "../controllers/slot.controller.js";
 
-
 const router = express.Router();
 
 // POST /slots (ADMIN)

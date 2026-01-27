@@ -1,28 +1,13 @@
-// export const allowRoles = (...roles) => {
-//   return (req, res, next) => {
-//     if (!roles.includes(req.user.role)) {
-//       return res.status(403).json({
-//         success: false,
-//         message: "Forbidden",
-//       });
-//     }
-//     //else
-//     next(); // proceed to the controller
-//   };
-// };
-
-
 // // ...roles = for multiple roles
 // // 403 = forbindden
+
+import ApiError from "../utils/ApiError.js";
 
 export const allowRoles = (...roles) => {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden: You do not have permission to perform this action",
-      });
+      throw new ApiError(403, "Forbidden");
     }
-    next();
+    next(); // proceed to the controller
   };
 };

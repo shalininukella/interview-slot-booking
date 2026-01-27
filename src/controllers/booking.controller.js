@@ -1,6 +1,8 @@
 import Booking from "../models/Booking.model.js";
 import { createBookingSchema } from "../validations/booking.validation.js";
 import { bookSlot } from "../services/booking.service.js";
+import ApiError from "../utils/ApiError.js";
+import mongoose from "mongoose";
 
 /**
  * POST /bookings
@@ -8,23 +10,23 @@ import { bookSlot } from "../services/booking.service.js";
  */
 export const createBooking = async (req, res, next) => {
   try {
-    const { error, value } = createBookingSchema.validate(req.body);
+    const { error, value } = createBookingSchema.validate(req.body, {
+      abortEarly: false,
+    });
+
     if (error) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation error",
-        errors: error.details.map((d) => d.message),
-      });
+      throw new ApiError(
+        400,
+        "Validation failed",
+        error.details.map((d) => d.message),
+      );
     }
 
     const booking = await bookSlot(value.slotId, req.user._id);
 
-    res.status(201).json({
-      success: true,
-      data: booking,
-    });
+    res.status(201).json({ success: true, data: booking });
   } catch (err) {
-    next(err); // centralized error handler will format response
+    next(err);
   }
 };
 
@@ -34,11 +36,41 @@ export const createBooking = async (req, res, next) => {
  */
 export const myBookings = async (req, res, next) => {
   try {
-    const bookings = await Booking.find({ candidateId: req.user._id }).populate(
-      "slotId",
-    ); // populate slot details
+    const { status, from, to, page = 1, limit = 10 } = req.query;
 
-    res.json({ success: true, data: bookings });
+    const filter = { candidateId: req.user._id };
+
+    if (status) {
+      if (!["BOOKED", "CANCELLED"].includes(status)) {
+        throw new ApiError(400, "Invalid status filter");
+      }
+      filter.status = status;
+    }
+
+    if (from || to) {
+      filter.bookedAt = {};
+      if (from) filter.bookedAt.$gte = new Date(from);
+      if (to) filter.bookedAt.$lte = new Date(to);
+    }
+
+    const pageNum = Math.max(parseInt(page), 1);
+    const limitNum = Math.min(parseInt(limit), 50);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [bookings, total] = await Promise.all([
+      Booking.find(filter).populate("slotId").skip(skip).limit(limitNum),
+      Booking.countDocuments(filter),
+    ]);
+
+    res.json({
+      success: true,
+      data: bookings,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -47,25 +79,23 @@ export const myBookings = async (req, res, next) => {
 /**
  * POST /bookings/:id/cancel
  * Candidate cancels their own booking
- * Idempotent: multiple cancels do not fail
+ * multiple cancels do not fail
  */
 export const cancelBooking = async (req, res, next) => {
   try {
-    const booking = await Booking.findById(req.params.id);
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new ApiError(400, "Invalid booking id");
+    }
+
+    const booking = await Booking.findById(id);
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: "Booking not found",
-        errors: [],
-      });
+      throw new ApiError(404, "Booking not found");
     }
 
     if (!booking.candidateId.equals(req.user._id)) {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden: cannot cancel someone else's booking",
-        errors: [],
-      });
+      throw new ApiError(403, "Forbidden");
     }
 
     if (booking.status === "CANCELLED") {

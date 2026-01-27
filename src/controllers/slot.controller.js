@@ -1,11 +1,12 @@
-import { createSlotSchema, updateSlotSchema } from '../validations/slot.validation.js';
-import { checkOverlap } from '../services/slot.service.js'
+import {
+  createSlotSchema,
+  updateSlotSchema,
+} from "../validations/slot.validation.js";
+import { checkOverlap } from "../services/slot.service.js";
 import ApiError from "../utils/ApiError.js";
-import Slot from '../models/Slot.model.js';
-import Booking from '../models/Booking.model.js';
-import mongoose from 'mongoose';
-
-// ADMIN: Create slot
+import Slot from "../models/Slot.model.js";
+import Booking from "../models/Booking.model.js";
+import mongoose from "mongoose";
 
 // value = {
 //   startTime: "2026-01-25T10:00:00Z", // string
@@ -14,25 +15,29 @@ import mongoose from 'mongoose';
 //   tags: ["frontend"],
 // };
 
+/**
+ADMIN: Create slot
+*/
+
 export const createSlot = async (req, res, next) => {
   try {
     const { error, value } = createSlotSchema.validate(req.body, {
-      abortEarly: false
+      abortEarly: false,
     });
 
     if (error) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: error.details.map(d => d.message)
-      });
+      throw new ApiError(
+        400,
+        "Validation failed",
+        error.details.map((d) => d.message),
+      );
     }
 
     const startTime = new Date(value.startTime);
     const endTime = new Date(value.endTime);
 
     if (startTime >= endTime) {
-      throw new ApiError(400, 'startTime must be before endTime');
+      throw new ApiError(400, "startTime must be before endTime");
     }
 
     await checkOverlap(req.user._id, startTime, endTime);
@@ -41,7 +46,7 @@ export const createSlot = async (req, res, next) => {
       ...value,
       startTime,
       endTime,
-      createdBy: req.user._id
+      createdBy: req.user._id,
     });
 
     res.status(201).json({ success: true, data: slot });
@@ -55,14 +60,7 @@ export const createSlot = async (req, res, next) => {
  */
 export const listSlots = async (req, res, next) => {
   try {
-    const {
-      from,
-      to,
-      tags,
-      availableOnly,
-      page = 1,
-      limit = 10
-    } = req.query;
+    const { from, to, tags, availableOnly, page = 1, limit = 10 } = req.query;
 
     const filters = {};
 
@@ -73,7 +71,7 @@ export const listSlots = async (req, res, next) => {
     }
 
     if (tags) {
-      filters.tags = { $in: tags.split(',') };
+      filters.tags = { $in: tags.split(",") };
     }
 
     const pageNum = Math.max(parseInt(page), 1);
@@ -85,47 +83,50 @@ export const listSlots = async (req, res, next) => {
       .skip(skip)
       .limit(limitNum);
 
-    const slotIds = slots.map(s => s._id);
+    const slotIds = slots.map((s) => s._id);
 
     const bookings = await Booking.aggregate([
       {
         $match: {
           slotId: { $in: slotIds },
-          status: 'BOOKED'
-        }
+          status: "BOOKED",
+        },
       },
       {
         $group: {
-          _id: '$slotId',
-          count: { $sum: 1 }
-        }
-      }
+          _id: "$slotId",
+          count: { $sum: 1 },
+        },
+      },
     ]);
 
     const bookingMap = {};
-    bookings.forEach(b => {
+    bookings.forEach((b) => {
       bookingMap[b._id.toString()] = b.count;
     });
 
-    let result = slots.map(slot => {
+    let result = slots.map((slot) => {
       const booked = bookingMap[slot._id.toString()] || 0;
       return {
         ...slot.toObject(),
-        availableSeats: slot.capacity - booked
+        availableSeats: slot.capacity - booked,
       };
     });
 
-    if (availableOnly === 'true') {
-      result = result.filter(s => s.availableSeats > 0);
+    if (availableOnly === "true") {
+      result = result.filter((s) => s.availableSeats > 0);
     }
+
+    const total = await Slot.countDocuments(filters);
 
     res.json({
       success: true,
       data: result,
       pagination: {
         page: pageNum,
-        limit: limitNum
-      }
+        limit: limitNum,
+        total,
+      },
     });
   } catch (err) {
     next(err);
@@ -140,25 +141,25 @@ export const getSlotById = async (req, res, next) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw new ApiError(400, 'Invalid slot id');
+      throw new ApiError(400, "Invalid slot id");
     }
 
     const slot = await Slot.findById(id);
     if (!slot) {
-      throw new ApiError(404, 'Slot not found');
+      throw new ApiError(404, "Slot not found");
     }
 
     const booked = await Booking.countDocuments({
       slotId: slot._id,
-      status: 'BOOKED'
+      status: "BOOKED",
     });
 
     res.json({
       success: true,
       data: {
         ...slot.toObject(),
-        availableSeats: slot.capacity - booked
-      }
+        availableSeats: slot.capacity - booked,
+      },
     });
   } catch (err) {
     next(err);
@@ -170,34 +171,38 @@ export const getSlotById = async (req, res, next) => {
  */
 export const updateSlot = async (req, res, next) => {
   try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new ApiError(400, "Invalid slot id");
+    }
+
     const { error, value } = updateSlotSchema.validate(req.body, {
-      abortEarly: false
+      abortEarly: false,
     });
 
     if (error) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: error.details.map(d => d.message)
-      });
+      throw new ApiError(
+        400,
+        "Validation failed",
+        error.details.map((d) => d.message),
+      );
     }
 
     const slot = await Slot.findById(req.params.id);
-    if (!slot) throw new ApiError(404, 'Slot not found');
+    if (!slot) throw new ApiError(404, "Slot not found");
 
     if (slot.createdBy.toString() !== req.user._id.toString()) {
-      throw new ApiError(403, 'Forbidden');
+      throw new ApiError(403, "Forbidden");
     }
 
     const startTime = value.startTime
       ? new Date(value.startTime)
       : slot.startTime;
-    const endTime = value.endTime
-      ? new Date(value.endTime)
-      : slot.endTime;
+    const endTime = value.endTime ? new Date(value.endTime) : slot.endTime;
 
     if (startTime >= endTime) {
-      throw new ApiError(400, 'startTime must be before endTime');
+      throw new ApiError(400, "startTime must be before endTime");
     }
 
     await checkOverlap(req.user._id, startTime, endTime, slot._id);
@@ -205,13 +210,13 @@ export const updateSlot = async (req, res, next) => {
     if (value.capacity !== undefined) {
       const booked = await Booking.countDocuments({
         slotId: slot._id,
-        status: 'BOOKED'
+        status: "BOOKED",
       });
 
       if (value.capacity < booked) {
         throw new ApiError(
           409,
-          'Capacity cannot be less than existing bookings'
+          "Capacity cannot be less than existing bookings",
         );
       }
 
@@ -235,24 +240,30 @@ export const updateSlot = async (req, res, next) => {
  */
 export const deleteSlot = async (req, res, next) => {
   try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new ApiError(400, "Invalid slot id");
+    }
+
     const slot = await Slot.findById(req.params.id);
-    if (!slot) throw new ApiError(404, 'Slot not found');
+    if (!slot) throw new ApiError(404, "Slot not found");
 
     if (slot.createdBy.toString() !== req.user._id.toString()) {
-      throw new ApiError(403, 'Forbidden');
+      throw new ApiError(403, "Forbidden");
     }
 
     const booked = await Booking.countDocuments({
       slotId: slot._id,
-      status: 'BOOKED'
+      status: "BOOKED",
     });
 
     if (booked > 0) {
-      throw new ApiError(409, 'Cannot delete slot with active bookings');
+      throw new ApiError(409, "Cannot delete slot with active bookings");
     }
 
     await slot.deleteOne();
-    res.json({ success: true, message: 'Slot deleted successfully' });
+    res.json({ success: true, message: "Slot deleted successfully" });
   } catch (err) {
     next(err);
   }

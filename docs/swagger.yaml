@@ -3,9 +3,13 @@ info:
   title: Interview Slot Booking API
   description: API for managing interview slots, users, and bookings
   version: 1.0.0
+
 servers:
   - url: http://localhost:3000
     description: Local server
+
+security:
+  - xUserIdHeader: []
 
 components:
   securitySchemes:
@@ -13,9 +17,18 @@ components:
       type: apiKey
       in: header
       name: x-user-id
-      description: "Simulate authentication via user ID"
+      description: Simulated authentication using user ID
 
   schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          nullable: true
+
     ErrorResponse:
       type: object
       properties:
@@ -24,29 +37,48 @@ components:
           example: false
         message:
           type: string
-          example: "Human readable error message"
+          example: Human readable error message
         errors:
           type: array
           items:
             type: string
-          example: ["email is required"]
+          example: ["validation error"]
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        total:
+          type: integer
+          example: 50
+
+    PaginatedResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+            pagination:
+              $ref: "#/components/schemas/Pagination"
 
     User:
       type: object
       properties:
         _id:
           type: string
-          example: 63f1b2c1f1f1f1f1f1f1f1f1
         name:
           type: string
-          example: John Doe
         email:
           type: string
-          example: john@example.com
         role:
           type: string
           enum: [ADMIN, CANDIDATE]
-          example: ADMIN
         createdAt:
           type: string
           format: date-time
@@ -68,19 +100,20 @@ components:
         capacity:
           type: integer
         createdBy:
-          $ref: "#/components/schemas/User"
+          type: string
+          description: Admin user ID
         tags:
           type: array
           items:
             type: string
+        availableSeats:
+          type: integer
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-        availableSeats:
-          type: integer
 
     Booking:
       type: object
@@ -88,9 +121,9 @@ components:
         _id:
           type: string
         slotId:
-          $ref: "#/components/schemas/Slot"
+          type: string
         candidateId:
-          $ref: "#/components/schemas/User"
+          type: string
         status:
           type: string
           enum: [BOOKED, CANCELLED]
@@ -98,36 +131,17 @@ components:
           type: string
           format: date-time
 
-  parameters:
-    PageParam:
-      name: page
-      in: query
-      description: Page number
-      required: false
-      schema:
-        type: integer
-        default: 1
-    LimitParam:
-      name: limit
-      in: query
-      description: Items per page
-      required: false
-      schema:
-        type: integer
-        default: 10
-
 paths:
   /users:
     post:
-      tags:
-        - Users
-      summary: Create a new user
+      tags: [Users]
+      summary: Create a user
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
               required: [name, email, role]
               properties:
                 name:
@@ -139,11 +153,11 @@ paths:
                   enum: [ADMIN, CANDIDATE]
       responses:
         "201":
-          description: Created
+          description: User created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/ApiResponse"
         "400":
           description: Validation error
           content:
@@ -151,16 +165,15 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: Email conflict
+          description: Email already exists
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
     get:
-      tags:
-        - Users
-      summary: List users with optional filters
+      tags: [Users]
+      summary: List users
       parameters:
         - name: role
           in: query
@@ -171,22 +184,26 @@ paths:
           in: query
           schema:
             type: string
-        - $ref: "#/components/parameters/PageParam"
-        - $ref: "#/components/parameters/LimitParam"
-        - name: x-user-id
-          in: header
-          required: true
+        - name: page
+          in: query
           schema:
-            type: string
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
       responses:
         "200":
-          description: List of users
+          description: Users list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/User"
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - properties:
+                      data:
+                        items:
+                          $ref: "#/components/schemas/User"
         "400":
           description: Invalid filters
           content:
@@ -195,28 +212,18 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
   /slots:
     post:
-      tags:
-        - Slots
-      summary: Create a slot (ADMIN only)
-      parameters:
-        - name: x-user-id
-          in: header
-          required: true
-          schema:
-            type: string
+      tags: [Slots]
+      summary: Create slot (ADMIN only)
+      security:
+        - xUserIdHeader: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
               required: [startTime, endTime, capacity]
               properties:
                 startTime:
@@ -234,40 +241,21 @@ paths:
                     type: string
       responses:
         "201":
-          description: Created slot
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Slot"
+          description: Slot created
         "400":
-          description: Invalid input
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          description: Validation error
         "401":
           description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Overlapping slot
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
     get:
-      tags:
-        - Slots
-      summary: List slots with filters
+      tags: [Slots]
+      summary: List slots (ADMIN + CANDIDATE)
+      security:
+        - xUserIdHeader: []
       parameters:
         - name: from
           in: query
@@ -281,105 +269,66 @@ paths:
             format: date-time
         - name: tags
           in: query
+          description: Comma separated tags
           schema:
             type: string
-            description: Comma-separated tags
         - name: availableOnly
           in: query
           schema:
             type: boolean
-        - $ref: "#/components/parameters/PageParam"
-        - $ref: "#/components/parameters/LimitParam"
-        - name: x-user-id
-          in: header
-          required: true
+        - name: page
+          in: query
           schema:
-            type: string
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
       responses:
         "200":
-          description: List of slots
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Slot"
+          description: Slots list
         "400":
-          description: Invalid params
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          description: Invalid filters
         "401":
           description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
   /slots/{id}:
     get:
-      tags:
-        - Slots
+      tags: [Slots]
       summary: Get slot by ID
+      security:
+        - xUserIdHeader: []
       parameters:
         - name: id
           in: path
-          required: true
-          schema:
-            type: string
-        - name: x-user-id
-          in: header
           required: true
           schema:
             type: string
       responses:
         "200":
           description: Slot details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Slot"
         "400":
           description: Invalid ID
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          description: Slot not found
 
     patch:
-      tags:
-        - Slots
+      tags: [Slots]
       summary: Update slot (ADMIN only)
+      security:
+        - xUserIdHeader: []
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
-        - name: x-user-id
-          in: header
-          required: true
-          schema:
-            type: string
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              type: object
               properties:
                 startTime:
                   type: string
@@ -396,53 +345,23 @@ paths:
       responses:
         "200":
           description: Slot updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Slot"
         "400":
           description: Invalid input
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          description: Slot not found
         "409":
           description: Overlap or capacity conflict
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
     delete:
-      tags:
-        - Slots
+      tags: [Slots]
       summary: Delete slot (ADMIN only)
+      security:
+        - xUserIdHeader: []
       parameters:
         - name: id
           in: path
-          required: true
-          schema:
-            type: string
-        - name: x-user-id
-          in: header
           required: true
           schema:
             type: string
@@ -451,46 +370,22 @@ paths:
           description: Slot deleted
         "401":
           description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          description: Slot not found
         "409":
-          description: Cannot delete due to existing bookings
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          description: Slot has active bookings
 
   /bookings:
     post:
-      tags:
-        - Bookings
-      summary: Create a booking (CANDIDATE only)
-      parameters:
-        - name: x-user-id
-          in: header
-          required: true
-          schema:
-            type: string
+      tags: [Bookings]
+      summary: Book a slot (CANDIDATE only)
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
               required: [slotId]
               properties:
                 slotId:
@@ -501,43 +396,21 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Booking"
+                $ref: "#/components/schemas/ApiResponse"
         "400":
           description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Slot not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: Duplicate booking / capacity exceeded
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
+          description: Duplicate booking or capacity exceeded
   /bookings/my:
     get:
-      tags:
-        - Bookings
-      summary: List candidate's bookings
+      tags: [Bookings]
+      summary: Get my bookings (CANDIDATE only)
       parameters:
         - name: status
           in: query
@@ -554,81 +427,43 @@ paths:
           schema:
             type: string
             format: date-time
-        - $ref: "#/components/parameters/PageParam"
-        - $ref: "#/components/parameters/LimitParam"
-        - name: x-user-id
-          in: header
-          required: true
-          schema:
-            type: string
       responses:
         "200":
-          description: List of bookings
+          description: My bookings
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Booking"
-        "400":
-          description: Invalid filters
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Booking"
         "401":
           description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
   /bookings/{id}/cancel:
     post:
-      tags:
-        - Bookings
-      summary: Cancel a booking (CANDIDATE only)
+      tags: [Bookings]
+      summary: Cancel booking (idempotent)
+      description: If already cancelled, returns success without error
+      security:
+        - xUserIdHeader: []
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
-        - name: x-user-id
-          in: header
-          required: true
-          schema:
-            type: string
       responses:
         "200":
-          description: Booking cancelled successfully
+          description: Booking cancelled
         "401":
           description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "403":
-          description: Forbidden / Booking belongs to another user
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          description: Not your booking
         "404":
           description: Booking not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "409":
-          description: Capacity / duplicate conflicts
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
