@@ -1,0 +1,35 @@
+# ----------------------
+# Node.js dependencies
+# ----------------------
+node_modules/
+
+# ----------------------
+# Environment variables
+# ----------------------
+.env
+
+# ----------------------
+# Logs
+# ----------------------
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# ----------------------
+# OS / Editor files
+# ----------------------
+.DS_Store
+Thumbs.db
+
+# ----------------------
+# Coverage / build output
+# ----------------------
+coverage/
+dist/
+build/
+
+# ----------------------
+# Optional: Swagger generated files (if any)
+# ----------------------
+swagger-output.json
