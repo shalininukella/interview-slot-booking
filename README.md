@@ -328,5 +328,4 @@ Controller composes data
       ↓
 Mongoose validates & persists
 ```
-```
 ---
