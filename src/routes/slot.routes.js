@@ -4,21 +4,22 @@ import { allowRoles } from "../middleware/role.middleware.js";
 import {
   createSlot,
   listSlots,
-  getSlot,
+  getSlotById,
   updateSlot,
   deleteSlot,
 } from "../controllers/slot.controller.js";
 
+
 const router = express.Router();
 
 // POST /slots (ADMIN)
-router.post("/", auth, allowRoles("ADMIN"), createSlot);
+router.post('/', auth, allowRoles("ADMIN"), createSlot);
 
 // GET /slots
-router.get("/", auth, listSlots);
+router.get('/', auth, listSlots);
 
 // GET /slots/:id
-router.get('/:id', auth, getSlot);
+router.get('/:id', auth, getSlotById);
 
 // PATCH /slots/:id (ADMIN only)
 router.patch('/:id',auth, allowRoles('ADMIN'), updateSlot);

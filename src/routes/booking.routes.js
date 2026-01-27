@@ -1,10 +1,9 @@
 import express from 'express';
-import { allowRoles } from '../middleware/role.middleware';
+import { allowRoles } from '../middleware/role.middleware.js';
 import { auth } from '../middleware/auth.middleware.js';
 import { createBooking, myBookings, cancelBooking } from "../controllers/booking.controller.js";
-import router from './slot.routes.js';
 
-router = express.Router();
+const router = express.Router();
 
 // POST /bookings (CANDIDATE)
 router.post("/", auth, allowRoles("CANDIDATE"), createBooking);
