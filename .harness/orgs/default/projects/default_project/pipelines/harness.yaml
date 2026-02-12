@@ -1,0 +1,43 @@
+pipeline:
+  name: harness
+  identifier: harness
+  projectIdentifier: default_project
+  orgIdentifier: default
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: interviewslotbooking
+        repoName: interview-slot-booking
+        build: <+input>
+  stages:
+    - stage:
+        name: Build docker image
+        identifier: Build_docker_image
+        description: ""
+        type: CI
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+            override: true
+          buildIntelligence:
+            enabled: true
+          platform:
+            os: Linux
+            arch: Arm64
+          runtime:
+            type: Docker
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: BuildAndPushDockerRegistry_1
+                  identifier: BuildAndPushDockerRegistry_1
+                  spec:
+                    connectorRef: dockerharness
+                    repo: https://hub.docker.com/repository/docker/shalininukella/interview-slot-booking/general
+                    tags:
+                      - <docker>
+                    caching: true
