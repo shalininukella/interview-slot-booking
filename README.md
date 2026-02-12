@@ -314,6 +314,14 @@ curl -X POST http://localhost:3000/bookings \
 ✔ Bonus implemented (transactions)
 
 ---
+## 🐳 Running with Docker
+
+### Build Image
+docker build -t interview-slot-booking .
+
+### Run Container
+docker run -p 3000:3000 --env-file .env interview-slot-booking
+
 
 ### 🔍 Validation Flow (Joi)
 
